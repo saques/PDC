@@ -141,7 +141,7 @@ public class SOCKS5Trunnable implements TRunnable<Socket> {
 		
 		
 		writeRequestResponse(dataOutput, fields[0], (byte)0, IPv4, 
-				s.getLocalAddress().getAddress(), intToByte2(s.getLocalPort()));
+				s.getInetAddress().getAddress(), intToByte2(s.getPort()));
 		
 		new Thread(new InputToOutput(usrSocket.getInputStream(), s.getOutputStream(),usrSocket,s)).start();
 		new Thread(new InputToOutput(s.getInputStream(), usrSocket.getOutputStream(),s,usrSocket)).start();
