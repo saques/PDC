@@ -45,13 +45,17 @@ public class TCPSelectorServer implements Runnable {
 						protocol.handleConnect(key);
 					}
 					
-					if(key.isReadable()){
+					if(key.isValid() && key.isReadable()){
 						ret = protocol.handleRead(key);
 					}
 					
 					if(key.isValid() && key.isWritable()){
 						ret = protocol.handleWrite(key);
 					}
+					
+					if(!ret)
+						key.cancel();
+					
 					
 				}
 			}

@@ -58,22 +58,29 @@ public class SOCKSV5Protocol implements TCPProtocol {
 	}
 
 	@Override
-	public void handleConnect(SelectionKey key) throws IOException {
+	public void handleConnect(SelectionKey key) {
 		SocketChannel channel = (SocketChannel)key.channel();
 		EndPoint client = (EndPoint)key.attachment();
-		if(channel.finishConnect()){
-			/**
-			 * I want to read from the key
-			 * I must write to the client that the
-			 * connection has been successful.
-			 */
-			client.getKey().interestOps(SelectionKey.OP_READ);
-			client.setState(SOCKSV5State.READ_CONN);
-			
+		try {
+			if(channel.finishConnect()){
+				/**
+				 * I want to read from the key
+				 * I must write to the client that the
+				 * connection has been successful.
+				 */
+				client.getKey().interestOps(SelectionKey.OP_READ);
+				client.setState(SOCKSV5State.READ_CONN);
+				
+				client.getOther().getKey().interestOps(SelectionKey.OP_WRITE);
+				client.getOther().setState(SOCKSV5State.FINISH_SUCCESS);
+			} else {
+				key.interestOps(SelectionKey.OP_CONNECT);
+			}
+		} catch (IOException e){
 			client.getOther().getKey().interestOps(SelectionKey.OP_WRITE);
-			client.getOther().setState(SOCKSV5State.FINISH_SUCCESS);
-		} else {
-			key.interestOps(SelectionKey.OP_CONNECT);
+			client.getOther().setState(SOCKSV5State.FINISH_FAILURE);
+			
+			key.cancel();
 		}
 	}
 

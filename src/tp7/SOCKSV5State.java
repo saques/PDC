@@ -210,6 +210,9 @@ public enum SOCKSV5State implements SOCKSV5Action{
 		@Override
 		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
 			EndPoint point = (EndPoint)key.attachment();
+			if(!point.getOther().getKey().isValid())
+				return false;
+			
 			point.getKey().interestOps(SelectionKey.OP_READ);
 			point.setState(READ_CONN);
 			point.getOther().getKey().interestOps(SelectionKey.OP_WRITE);
@@ -230,6 +233,8 @@ public enum SOCKSV5State implements SOCKSV5Action{
 		@Override
 		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
 			EndPoint point = (EndPoint)key.attachment();
+			if(!point.getOther().getKey().isValid())
+				return false;
 			point.getKey().interestOps(SelectionKey.OP_READ);
 			point.setState(READ_CONN);
 			return true;
