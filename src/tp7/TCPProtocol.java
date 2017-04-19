@@ -12,11 +12,11 @@ public interface TCPProtocol {
 		clientChannel.configureBlocking(false);
 		
 		SOCKSV5Client client = new SOCKSV5Client();
-		client.key = clientChannel.register(key.selector(), SelectionKey.OP_READ, client);
+		client.setKey(clientChannel.register(key.selector(), SelectionKey.OP_READ, client));
 		
 	}
 	
-	boolean handleConnect(SelectionKey key) throws IOException;
+	void handleConnect(SelectionKey key) throws IOException;
 	
 	boolean handleRead(SelectionKey key) throws IOException;
 	

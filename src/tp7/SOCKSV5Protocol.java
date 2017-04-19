@@ -25,52 +25,56 @@ public class SOCKSV5Protocol implements TCPProtocol {
 	@Override
 	public boolean handleRead(SelectionKey key) throws IOException {
 		SocketChannel channel = (SocketChannel)key.channel();
-		SOCKSV5Client client = (SOCKSV5Client)key.attachment();
+		EndPoint client = (EndPoint)key.attachment();
+		
+		if(client.getState() == null)
+			return true;
+		
 		
 		client.getBuffer().clear();
 		long bytesRead = channel.read(client.getBuffer());
 		if(bytesRead == -1) {
 			return false;
 		}
-		if(client.getState().doOp(key,this)){
-			key.interestOps(SelectionKey.OP_WRITE);
-			return true;
-		}
-		return false;
+
+		return client.getState().doOp(key,this);
 
 	}
 
 	@Override
 	public boolean handleWrite(SelectionKey key) throws IOException {
 		SocketChannel channel = (SocketChannel)key.channel();
-		SOCKSV5Client client = (SOCKSV5Client)key.attachment();
+		EndPoint client = (EndPoint)key.attachment();
+		
+		if(client.getState() == null)
+			return true;
 		
 		boolean ret = client.getState().doOp(key,this);
 		
 		client.getBuffer().flip();
 		channel.write(client.getBuffer());
 		
-		if(ret){
-			key.interestOps(SelectionKey.OP_READ);
-			return true;
-		}
-		return false;
+		return ret;
 	}
 
 	@Override
-	public boolean handleConnect(SelectionKey key) throws IOException {
+	public void handleConnect(SelectionKey key) throws IOException {
 		SocketChannel channel = (SocketChannel)key.channel();
+		EndPoint client = (EndPoint)key.attachment();
 		if(channel.finishConnect()){
 			/**
 			 * I want to read from the key
 			 * I must write to the client that the
 			 * connection has been successful.
 			 */
-			((SOCKSV5Remote)key.attachment()).client.key.interestOps(SelectionKey.OP_READ);
+			client.getKey().interestOps(SelectionKey.OP_READ);
+			client.setState(SOCKSV5State.READ_CONN);
+			
+			client.getOther().getKey().interestOps(SelectionKey.OP_WRITE);
+			client.getOther().setState(SOCKSV5State.FINISH_SUCCESS);
 		} else {
 			key.interestOps(SelectionKey.OP_CONNECT);
 		}
-		return false;
 	}
 
 }

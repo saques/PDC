@@ -42,6 +42,7 @@ public enum SOCKSV5State implements SOCKSV5Action{
 			client.version = version;
 			client.selectedMethod = containsValidMethod? lowestMethod: SOCKSV5Protocol.INVALID_METHOD;
 			
+			key.interestOps(SelectionKey.OP_WRITE);
 			client.setState(ANSW_METHODS);
 			return true;
 			
@@ -60,6 +61,8 @@ public enum SOCKSV5State implements SOCKSV5Action{
 			buffer.clear();
 			buffer.put((byte)client.version);
 			buffer.put((byte)client.selectedMethod);
+			
+			key.interestOps(SelectionKey.OP_READ);
 			client.setState(RCV_REQUEST);
 			return client.selectedMethod != SOCKSV5Protocol.INVALID_METHOD ? true : false;
 		}
@@ -86,6 +89,7 @@ public enum SOCKSV5State implements SOCKSV5Action{
 				client.version = fields[0];
 				client.status = (byte)0x07;
 				client.setState(ANSW_REQUEST);
+				key.interestOps(SelectionKey.OP_WRITE);
 				return true;
 			}
 			
@@ -93,6 +97,7 @@ public enum SOCKSV5State implements SOCKSV5Action{
 				client.version = fields[0];
 				client.status = (byte)0x08;
 				client.setState(ANSW_REQUEST);
+				key.interestOps(SelectionKey.OP_WRITE);
 				return true;
 			}
 			
@@ -123,6 +128,7 @@ public enum SOCKSV5State implements SOCKSV5Action{
 				client.version = fields[0];
 				client.status = (byte)0x04;
 				client.setState(ANSW_REQUEST);
+				key.interestOps(SelectionKey.OP_WRITE);
 				return true;
 			}
 			
@@ -135,6 +141,7 @@ public enum SOCKSV5State implements SOCKSV5Action{
 			client.targetPort = port;
 			
 			client.setState(ANSW_REQUEST);
+			key.interestOps(SelectionKey.OP_WRITE);
 			return true;
 		}
 		
@@ -158,33 +165,62 @@ public enum SOCKSV5State implements SOCKSV5Action{
 				SocketChannel channel = SocketChannel.open();
 				channel.configureBlocking(false);
 				SOCKSV5Remote remote = new SOCKSV5Remote(client);
+				client.setEndPoint(remote);
+				SelectionKey oKey = null;
 				if(!channel.connect(new InetSocketAddress(client.targetAddr, client.targetPort))){
-					channel.register(key.selector(), SelectionKey.OP_CONNECT, remote);
+					oKey = channel.register(key.selector(), SelectionKey.OP_CONNECT, remote);
+					client.getKey().interestOps(SelectionKey.OP_WRITE);
+					client.setState(null);
 				} else{
 					fillSuccess(client);
-					key.interestOps(SelectionKey.OP_READ);
-					return true;
+					oKey = channel.register(key.selector(), SelectionKey.OP_READ, remote);
+					client.getKey().interestOps(SelectionKey.OP_READ);
+					client.setState(READ_CONN);
+					remote.setState(READ_CONN);
 				}
-				
+				remote.setKey(oKey);
+				return true;
 			} catch (IOException e){
 				fillFailure(client);
 				return false;
-			}
-
-			
-			
-			
-			return true;
+			}	
 		}
 		
+	},
+	
+	
+	FINISH_SUCCESS(){
+
+		@Override
+		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
+			SOCKSV5Client client = (SOCKSV5Client)key.attachment();
+			client.getBuffer().clear();
+			fillSuccess(client);
+			client.getKey().interestOps(SelectionKey.OP_READ);
+			client.setState(READ_CONN);
+			client.getOther().getKey().interestOps(SelectionKey.OP_READ);
+			client.getOther().setState(READ_CONN);
+			return true;
+		}
+			
 	},
 	
 	READ_CONN(){
 
 		@Override
 		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
-			// TODO Auto-generated method stub
-			return false;
+			EndPoint point = (EndPoint)key.attachment();
+			point.getKey().interestOps(SelectionKey.OP_READ);
+			point.setState(READ_CONN);
+			point.getOther().getKey().interestOps(SelectionKey.OP_WRITE);
+			point.getOther().setState(WRITE_CONN);
+			/**
+			 * Write read bytes to other buffer.
+			 */
+			point.getBuffer().flip();
+			point.getOther().getBuffer().clear();
+			point.getOther().getBuffer().put(point.getBuffer());
+			return true;
 		}
 		
 	},
@@ -193,7 +229,22 @@ public enum SOCKSV5State implements SOCKSV5Action{
 
 		@Override
 		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
-			// TODO Auto-generated method stub
+			EndPoint point = (EndPoint)key.attachment();
+			point.getKey().interestOps(SelectionKey.OP_READ);
+			point.setState(READ_CONN);
+			return true;
+		}
+		
+	}, 
+	
+	FINISH_FAILURE () {
+
+		@Override
+		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
+			SOCKSV5Client client = (SOCKSV5Client)key.attachment();
+			client.getBuffer().clear();
+			client.status = (byte)0x05;
+			fillFailure(client);
 			return false;
 		}
 		
