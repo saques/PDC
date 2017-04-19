@@ -2,11 +2,11 @@ package tp7;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.Socket;
+import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-
-import tp1.InputToOutput;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.SocketChannel;
 
 
 public enum SOCKSV5State implements SOCKSV5Action{
@@ -14,7 +14,8 @@ public enum SOCKSV5State implements SOCKSV5Action{
 	RCV_METHODS () {
 
 		@Override
-		public boolean doOp(SOCKSV5Client client, SOCKSV5Protocol protocol) {
+		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
+			SOCKSV5Client client = (SOCKSV5Client)key.attachment();
 			System.out.println(this.name());
 			ByteBuffer buffer = client.getBuffer();
 			
@@ -51,7 +52,8 @@ public enum SOCKSV5State implements SOCKSV5Action{
 	ANSW_METHODS () {
 
 		@Override
-		public boolean doOp(SOCKSV5Client client, SOCKSV5Protocol protocol) {
+		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
+			SOCKSV5Client client = (SOCKSV5Client)key.attachment();
 			System.out.println(this.name());
 			ByteBuffer buffer = client.getBuffer();
 			
@@ -67,7 +69,8 @@ public enum SOCKSV5State implements SOCKSV5Action{
 	RCV_REQUEST() {
 
 		@Override
-		public boolean doOp(SOCKSV5Client client, SOCKSV5Protocol protocol)  {
+		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol)  {
+			SOCKSV5Client client = (SOCKSV5Client)key.attachment();
 			System.out.println(this.name());
 			ByteBuffer buffer = client.getBuffer();
 			/*
@@ -141,62 +144,81 @@ public enum SOCKSV5State implements SOCKSV5Action{
 	ANSW_REQUEST() {
 
 		@Override
-		public boolean doOp(SOCKSV5Client client, SOCKSV5Protocol protocol) {
+		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
+			SOCKSV5Client client = (SOCKSV5Client)key.attachment();
 			System.out.println(this.name());
 			ByteBuffer buffer = client.getBuffer();
 			buffer.clear();
 			if(client.status != (byte)0x00){
-				//PRINT FAILURE
-				buffer.put(client.version);
-				buffer.put(client.status);
-				buffer.put((byte)0x00);
-				buffer.put(client.addrType);
-				buffer.put(client.address);
-				buffer.put(client.port);
+				fillFailure(client);
 				return false;
 			}
 			
-			Socket s = null;
 			try {
-				s = new Socket(client.targetAddr, client.targetPort);
-			} catch (IOException e){
-				buffer.put(client.version);
-				buffer.put((byte)0x05);
-				buffer.put((byte)0x00);
-				buffer.put(client.addrType);
-				buffer.put(client.address);
-				buffer.put(client.port);
-				return false;
-			}
-			
-			buffer.put(client.version);
-			buffer.put((byte)0x00);
-			buffer.put((byte)0x00);
-			buffer.put(client.addrType);
-			buffer.put(s.getInetAddress().getAddress());
-			buffer.put(intToByte2(s.getPort()));
-			
-			
-			try {
-				new Thread(new InputToOutput(client.getSocket().getInputStream(), s.getOutputStream(),client.getSocket(),s)).start();
-				new Thread(new InputToOutput(s.getInputStream(), client.getSocket().getOutputStream(),s,client.getSocket())).start();
-			} catch (IOException e) {
+				SocketChannel channel = SocketChannel.open();
+				channel.configureBlocking(false);
+				SOCKSV5Remote remote = new SOCKSV5Remote(client);
+				if(!channel.connect(new InetSocketAddress(client.targetAddr, client.targetPort))){
+					channel.register(key.selector(), SelectionKey.OP_CONNECT, remote);
+				} else{
+					fillSuccess(client);
+					key.interestOps(SelectionKey.OP_READ);
+					return true;
+				}
 				
+			} catch (IOException e){
+				fillFailure(client);
+				return false;
 			}
+
 			
 			
+			
+			return true;
+		}
+		
+	},
+	
+	READ_CONN(){
+
+		@Override
+		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
+			// TODO Auto-generated method stub
+			return false;
+		}
+		
+	},
+	
+	WRITE_CONN(){
+
+		@Override
+		public boolean doOp(SelectionKey key, SOCKSV5Protocol protocol) {
+			// TODO Auto-generated method stub
 			return false;
 		}
 		
 	};
 	
-	private static int byte2toInt(byte n[]){
-		int ans = 0;
-		ans += ((n[0]>>4)&0x0F)*16*16*16;
-		ans += ((n[0])&0x0F)*16*16;
-		ans += ((n[1]>>4)&0x0F)*16;
-		ans += ((n[1])&0x0F);
-		return ans;
+	
+	private static void fillFailure(SOCKSV5Client client){
+		ByteBuffer buffer = client.getBuffer();
+		//PRINT FAILURE
+		buffer.put(client.version);
+		buffer.put(client.status);
+		buffer.put((byte)0x00);
+		buffer.put(client.addrType);
+		buffer.put(new byte[4]);
+		buffer.put(new byte[2]);
+	}
+	
+	static void fillSuccess(SOCKSV5Client client){
+		ByteBuffer buffer = client.getBuffer();
+		buffer.put(client.version);
+		buffer.put(client.status);
+		buffer.put((byte)0x00);
+		buffer.put(client.addrType);
+		buffer.put(client.targetAddr.getAddress());
+		buffer.put(intToByte2(client.targetPort));
 	}
 	
 	private static byte[] intToByte2(int n){
@@ -212,4 +234,13 @@ public enum SOCKSV5State implements SOCKSV5Action{
 		ans[1] +=n;
 		return ans;
 	}
+	private static int byte2toInt(byte n[]){
+		int ans = 0;
+		ans += ((n[0]>>4)&0x0F)*16*16*16;
+		ans += ((n[0])&0x0F)*16*16;
+		ans += ((n[1]>>4)&0x0F)*16;
+		ans += ((n[1])&0x0F);
+		return ans;
+	}
+	
 }

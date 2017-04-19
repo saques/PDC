@@ -3,18 +3,17 @@ package tp7;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.SocketChannel;
 
 public class SOCKSV5Client {
 	private static final int BUFF_SIZE = 1024;
 	
-	/**
-	 * To establish two way connection
-	 */
-	private Socket socket;
-	
 	private SOCKSV5State state;
 	private ByteBuffer buffer;
-
+	
+	SelectionKey key;
+	
 	Byte version;
 	Byte selectedMethod;
 
@@ -26,18 +25,13 @@ public class SOCKSV5Client {
 
 	
 	byte status;
-
 	byte addrType = SOCKSV5Protocol.IPv4;
 
-	byte[] port = new byte[2];
-
-	byte[] address = new byte[4];
 
 
-	public SOCKSV5Client(Socket s){
+	public SOCKSV5Client(){
 		this.state = SOCKSV5State.RCV_METHODS;
 		this.buffer = ByteBuffer.allocate(BUFF_SIZE);
-		socket = s;
 	}
 	
 	void setState(SOCKSV5State state){
@@ -52,8 +46,5 @@ public class SOCKSV5Client {
 		return buffer;
 	}
 	
-	Socket getSocket(){
-		return socket;
-	}
 	
 }

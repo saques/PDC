@@ -36,22 +36,22 @@ public class TCPSelectorServer implements Runnable {
 				while(keyIter.hasNext()){
 					SelectionKey key = keyIter.next();
 					keyIter.remove();
-					boolean ret = true;
 					if(key.isAcceptable()){
 						protocol.handleAccept(key);
 					}
 					
+					if(key.isConnectable()){
+						protocol.handleConnect(key);
+					}
+					
 					if(key.isReadable()){
-						ret = protocol.handleRead(key);
+						protocol.handleRead(key);
 					}
 					
 					if(key.isValid() && key.isWritable()){
-						ret = protocol.handleWrite(key);
+						protocol.handleWrite(key);
 					}
 					
-					if(!ret){
-						key.cancel();
-					}
 					
 				}
 			}
